@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego de Tableros y Bombas</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e24;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+            color: #4cd137;
+        }
+
+        #turno-info {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .contenedor-tableros {
+            display: flex;
+            gap: 40px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .tablero-wrapper {
+            text-align: center;
+        }
+
+        .tablero-titulo {
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .tablero {
+            display: grid;
+            grid-template-columns: repeat(5, 50px);
+            grid-template-rows: repeat(5, 50px);
+            gap: 4px;
+            background-color: #2f3640;
+            padding: 8px;
+            border-radius: 8px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+        }
+
+        .celda {
+            background-color: #3f4449;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            transition: background 0.2s;
+        }
+
+        /* Estilos de las fichas y elementos */
+        .jugador-rojo { background-color: #e84118 !important; border-radius: 50%; width: 80%; height: 80%; }
+        .jugador-azul { background-color: #00a8ff !important; border-radius: 50%; width: 80%; height: 80%; }
+        .bomba { color: #fbc531; font-weight: bold; }
+        .celda-bomba-activa { background-color: #718093; }
+
+        /* Controles de abajo */
+        .panel-controles {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            background: #2f3640;
+            padding: 15px 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .ficha-verde {
+            background-color: #4cd137;
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #44bd32;
+            transition: all 0.1s ease;
+        }
+
+        .ficha-verde:active {
+            transform: translateY(4px);
+            box-shadow: 0 0px 0 #44bd32;
+        }
+
+        .ficha-verde:disabled {
+            background-color: #718093;
+            box-shadow: 0 4px 0 #636e72;
+            cursor: not-allowed;
+        }
+
+        #resultado-accion {
+            font-size: 1.1rem;
+            font-weight: bold;
+            min-height: 24px;
+            color: #fbc531;
+        }
+
+        .instrucciones {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #a4b0be;
+            max-width: 500px;
+            text-align: center;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Tableros & Bombas</h1>
+    <div id="turno-info">Turno del Jugador 1 (Rojo)</div>
+
+    <div class="contenedor-tableros">
+        <div class="tablero-wrapper">
+            <div class="tablero-titulo" style="color: #e84118;">Tablero 1 (Rojo)</div>
+            <div class="tablero" id="tablero1"></div>
+        </div>
+
+        <div class="tablero-wrapper">
+            <div class="tablero-titulo" style="color: #00a8ff;">Tablero 2 (Azul)</div>
+            <div class="tablero" id="tablero2"></div>
+        </div>
+    </div>
+
+    <div class="panel-controles">
+        <button class="ficha-verde" id="btn-accion" onclick="tirarFichaVerde()">Tirar Ficha Verde</button>
+        <div id="resultado-accion">Presiona para iniciar tu turno</div>
+        <div class="instrucciones" id="guia-uso">
+            Usa las flechas del teclado para moverte si te toca "Avanzar".<br>
+            Haz clic en el tablero rival si te toca "Poner Bomba".
+        </div>
+    </div>
+
+    <script>
+        const TAMANO = 5;
+        // Posiciones iniciales (esquinas opuestas para variar)
+        let posJ1 = { x: 0, y: 0 };
+        let posJ2 = { x: 4, y: 4 };
+
+        // Matrices para registrar bombas (true/false)
+        let bombasT1 = Array(TAMANO).fill().map(() => Array(TAMANO).fill(false));
+        let bombasT2 = Array(TAMANO).fill().map(() => Array(TAMANO).fill(false));
+
+        let turno = 1; // 1 = J1 (Rojo), 2 = J2 (Azul)
+        let estadoTurno = 'esperando_ruleta'; // esperando_ruleta, moviendo, poniendo_bomba, juego_terminado
+
+        // Iniciar juego
+        crearTablero('tablero1', 1);
+        crearTablero('tablero2', 2);
+        actualizarPantalla();
+
+        function crearTablero(idElemento, numTablero) {
+            const contenedor = document.getElementById(idElemento);
+            contenedor.innerHTML = '';
+            for (let y = 0; y < TAMANO; y++) {
+                for (let x = 0; x < TAMANO; x++) {
+                    const celda = document.createElement('div');
+                    celda.classList.add('celda');
+                    celda.dataset.x = x;
+                    celda.dataset.y = y;
+                    
+                    // Si hacen clic en el tablero rival para poner bomba
+                    celda.addEventListener('click', () => clickCelda(numTablero, x, y));
+                    
+                    contenedor.appendChild(celda);
+                }
+            }
+        }
+
+        function actualizarPantalla() {
+            // Limpiar tableros de fichas visuales viejas
+            document.querySelectorAll('.celda').forEach(c => {
+                c.innerHTML = '';
+                c.classList.remove('celda-bomba-activa');
+            });
+
+            // Dibujar bombas e iconos
+            for(let y=0; y<TAMANO; y++){
+                for(let x=0; x<TAMANO; x++){
+                    if(bombasT1[y][x]) {
+                        const celda = document.querySelector(`#tablero1 [data-x="${x}"][data-y="${y}"]`);
+                        celda.innerHTML = '<span class="bomba">💣</span>';
+                        celda.classList.add('celda-bomba-activa');
+                    }
+                    if(bombasT2[y][x]) {
+                        const celda = document.querySelector(`#tablero2 [data-x="${x}"][data-y="${y}"]`);
+                        celda.innerHTML = '<span class="bomba">💣</span>';
+                        celda.classList.add('celda-bomba-activa');
+                    }
+                }
+            }
+
+            // Dibujar Ficha Roja (J1 en su tablero)
+            const celdaJ1 = document.querySelector(`#tablero1 [data-x="${posJ1.x}"][data-y="${posJ1.y}"]`);
+            if(celdaJ1) celdaJ1.innerHTML = '<div class="jugador-rojo"></div>';
+
+            // Dibujar Ficha Azul (J2 en su tablero)
+            const celdaJ2 = document.querySelector(`#tablero2 [data-x="${posJ2.x}"][data-y="${posJ2.y}"]`);
+            if(celdaJ2) celdaJ2.innerHTML = '<div class="jugador-azul"></div>';
+
+            // Mensaje de Turno superior
+            const info = document.getElementById('turno-info');
+            if (estadoTurno !== 'juego_terminado') {
+                info.innerText = `Turno del Jugador ${turno} (${turno === 1 ? 'Rojo' : 'Azul'})`;
+                info.style.color = turno === 1 ? '#e84118' : '#00a8ff';
+                document.getElementById('btn-accion').disabled = (estadoTurno !== 'esperando_ruleta');
+            }
+        }
+
+        function tirarFichaVerde() {
+            if (estadoTurno !== 'esperando_ruleta') return;
+
+            // 50% de probabilidad: Avanzar o Bomba
+            const azar = Math.random() < 0.5 ? 'AVANZAR' : 'BOMBA';
+            const textResultado = document.getElementById('resultado-accion');
+
+            if (azar === 'AVANZAR') {
+                estadoTurno = 'moviendo';
+                textResultado.innerText = "🎲 ¡Te toca AVANZAR! Usa las FLECHAS del teclado para moverte.";
+                // Verificar si está atrapado antes de moverse
+                checarBloqueo();
+            } else {
+                estadoTurno = 'poniendo_bomba';
+                textResultado.innerText = `💣 ¡BOMBA! Haz clic en una casilla del TABLERO JUGADOR ${turno === 1 ? '2 (Azul)' : '1 (Rojo)'}`;
+            }
+            actualizarPantalla();
+        }
+
+        // Capturar movimiento de teclado
+        window.addEventListener('keydown', (e) => {
+            if (estadoTurno !== 'moviendo') return;
+
+            let dx = 0, dy = 0;
+            if (e.key === 'ArrowUp') dy = -1;
+            else if (e.key === 'ArrowDown') dy = 1;
+            else if (e.key === 'ArrowLeft') dx = -1;
+            else if (e.key === 'ArrowRight') dx = 1;
+            else return; // Otra tecla
+
+            e.preventDefault();
+
+            let posActual = turno === 1 ? posJ1 : posJ2;
+            let nuevaX = posActual.x + dx;
+            let nuevaY = posActual.y + dy;
+
+            // Validar límites del tablero
+            if (nuevaX >= 0 && nuevaX < TAMANO && nuevaY >= 0 && nuevaY < TAMANO) {
+                posActual.x = nuevaX;
+                posActual.y = nuevaY;
+
+                // Comprobar si pisó una bomba
+                let tableroBombas = turno === 1 ? bombasT1 : bombasT2;
+                if (tableroBombas[nuevaY][nuevaX]) {
+                    finalizarJuego(`¡El Jugador ${turno} tocó una bomba y explotó! Perdió.`);
+                    return;
+                }
+
+                // Turno completado con éxito
+                pasarTurno();
+            }
+        });
+
+        // Evento al dar clic en las celdas para colocar bombas
+        function clickCelda(numTablero, x, y) {
+            if (estadoTurno !== 'poniendo_bomba') return;
+
+            // El J1 pone bombas en el Tablero 2, y el J2 en el Tablero 1
+            if (turno === 1 && numTablero === 2) {
+                // Validar que no se coloque donde ya está parado el jugador rival directamente si se prefiere, 
+                // pero las reglas dicen que si la toca pierde, así que la puede poner en cualquier celda vacía.
+                if(posJ2.x === x && posJ2.y === y) {
+                    finalizarJuego("¡Le pusiste la bomba directamente al Jugador 2! ¡Explotó!");
+                    return;
+                }
+                bombasT2[y][x] = true;
+                pasarTurno();
+            } else if (turno === 2 && numTablero === 1) {
+                if(posJ1.x === x && posJ1.y === y) {
+                    finalizarJuego("¡Le pusiste la bomba directamente al Jugador 1! ¡Explotó!");
+                    return;
+                }
+                bombasT1[y][x] = true;
+                pasarTurno();
+            }
+        }
+
+        function pasarTurno() {
+            turno = turno === 1 ? 2 : 1;
+            estadoTurno = 'esperando_ruleta';
+            document.getElementById('resultado-accion').innerText = "Presiona la ficha verde para tu acción.";
+            actualizarPantalla();
+        }
+
+        // Comprobar si el jugador actual no tiene movimientos posibles antes de que intente moverse
+        function checarBloqueo() {
+            let pos = turno === 1 ? posJ1 : posJ2;
+            let movimientos = [
+                {x: pos.x, y: pos.y - 1}, // Arriba
+                {x: pos.x, y: pos.y + 1}, // Abajo
+                {x: pos.x - 1, y: pos.y}, // Izquierda
+                {x: pos.x + 1, y: pos.y}  // Derecha
+            ];
+
+            // Filtrar movimientos que estén dentro del tablero
+            let validos = movimientos.filter(m => m.x >= 0 && m.x < TAMANO && m.y >= 0 && m.y < TAMANO);
+
+            // Si todos los movimientos válidos están bloqueados por bombas (o no hay movimientos)
+            // Nota: Como pisar bomba es perder, si el jugador está rodeado de paredes y bombas de tal manera que cualquier paso lo mata, o si simplemente no puede salir.
+            // Para ser fieles a la regla "el que ya no tenga movimiento a donde moverse pierde":
+            let encerrado = validos.length === 0; 
+            
+            if (encerrado) {
+                finalizarJuego(`¡El Jugador ${turno} ya no tiene movimientos válidos disponibles! Perdió.`);
+            }
+        }
+
+        function finalizarJuego(mensaje) {
+            estadoTurno = 'juego_terminado';
+            document.getElementById('turno-info').innerText = "¡PARTIDA TERMINADA!";
+            document.getElementById('turno-info').style.color = "#f5f6fa";
+            document.getElementById('resultado-accion').innerHTML = `<span style="color: #e84118;">${mensaje}</span><br><br><button onclick="reiniciarJuego()" style="padding: 8px 16px; font-weight:bold; cursor:pointer;">Jugar de Nuevo</button>`;
+            document.getElementById('btn-accion').disabled = true;
+        }
+
+        function reiniciarJuego() {
+            posJ1 = { x: 0, y: 0 };
+            posJ2 = { x: 4, y: 4 };
+            bombasT1 = Array(TAMANO).fill().map(() => Array(TAMANO).fill(false));
+            bombasT2 = Array(TAMANO).fill().map(() => Array(TAMANO).fill(false));
+            turno = 1;
+            estadoTurno = 'esperando_ruleta';
+            document.getElementById('resultado-accion').innerText = "Presiona para iniciar tu turno";
+            actualizarPantalla();
+        }
+    </script>
+</body>
+</html>
